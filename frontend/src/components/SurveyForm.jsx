@@ -194,11 +194,20 @@ function SurveyForm() {
                     data: { student_type: "high_school" }
                 });
                 setMessage("Survey submitted successfully!");
-                const analysis = await analyseFile();
-                console.log("Report analysis:", analysis);
-                generateRecommendations().catch(console.error);
-                navigate("/quiz/loading");
-                
+
+                if (reportPath) {
+                  console.log("Report found — running analysis...");
+                  try {
+                    const analysis = await analyseFile();
+                    console.log("Report analysis:", analysis);
+                  } catch (err) {
+                    console.error("Report analysis failed:", err);
+                  }
+                } else {
+                  console.log("No report uploaded — skipping analysis.");
+                }
+                await generateRecommendations();
+                navigate("/quiz/loading");    
         }
       }
 
@@ -231,9 +240,18 @@ function SurveyForm() {
             data: { student_type: "university" }
           });
           setMessage("Survey submitted successfully!");
-          const analysis = await analyseFile();
-          console.log("Report analysis:", analysis);
-          generateRecommendations().catch(console.error);
+          if (reportPath) {
+            console.log("Report found — running analysis...");
+            try {
+              const analysis = await analyseFile();
+              console.log("Report analysis:", analysis);
+            } catch (err) {
+              console.error("Report analysis failed:", err);
+            }
+          } else {
+            console.log("No report uploaded — skipping analysis.");
+          }
+          await generateRecommendations();
           navigate("/quiz/loading");
       }
     }
@@ -1041,6 +1059,39 @@ function SurveyForm() {
     </div>
     
   )}
+
+    {loading && (
+      <div className="fixed inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-sky-50 via-blue-100/80 to-indigo-100/70 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 backdrop-blur-sm z-50 transition-opacity duration-300">
+        <svg
+          className="animate-spin-slow h-16 w-16 text-sky-600 dark:text-sky-400 mb-6"
+          viewBox="0 0 50 50"
+        >
+          <circle
+            className="opacity-25"
+            cx="25"
+            cy="25"
+            r="20"
+            stroke="currentColor"
+            strokeWidth="6"
+            fill="none"
+          />
+          <circle
+            className="animate-dash"
+            cx="25"
+            cy="25"
+            r="20"
+            stroke="currentColor"
+            strokeWidth="6"
+            strokeLinecap="round"
+            fill="none"
+          />
+        </svg>
+
+        <p className="text-xl font-semibold text-gray-800 dark:text-gray-100 animate-pulse tracking-wide">
+          Saving your survey responses...
+        </p>
+      </div>
+    )}
 
 
     </div>
