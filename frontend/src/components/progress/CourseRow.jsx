@@ -1,7 +1,7 @@
 // src/components/CourseRow.jsx
-import React, { useState } from "react";
-import { supabase } from "../../supabaseClient";
+import { useState } from "react";
 import { HiCheckCircle, HiPencil } from "react-icons/hi";
+import { supabase } from "../../supabaseClient";
 
 // Helper function to recalculate stats
 async function recalculateStats(userId) {
@@ -47,7 +47,14 @@ async function recalculateStats(userId) {
     .eq("user_id", userId);
 }
 
-export default function CourseRow({ course, completed, userId, category, onUpdate }) {
+export default function CourseRow({ 
+  course, 
+  completed, 
+  userId, 
+  category, 
+  courseSource, 
+  onUpdate 
+}) {
   const [isCompleted, setIsCompleted] = useState(!!completed?.is_completed);
   const [mark, setMark] = useState(completed?.mark || "");
   const [editingMark, setEditingMark] = useState(false);
@@ -69,6 +76,8 @@ export default function CourseRow({ course, completed, userId, category, onUpdat
         uoc: course.uoc,
         is_completed: newCompletedState,
         category: category,
+        source_type: courseSource?.source_type || 'program',
+        source_code: courseSource?.source_code || null,
       });
     }
 
@@ -96,6 +105,8 @@ export default function CourseRow({ course, completed, userId, category, onUpdat
         uoc: course.uoc,
         mark: markValue,
         category: category,
+        source_type: courseSource?.source_type || 'program',
+        source_code: courseSource?.source_code || null,
       });
     }
 

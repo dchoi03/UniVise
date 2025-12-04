@@ -1,22 +1,14 @@
 // src/components/roadmap/ProgramFlexibility.jsx
-import RoadmapCard from "./RoadmapCard";
-import { useState, useEffect } from "react";
+import { ArrowRight, CheckCircle2, Info, RefreshCw, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
-import { Info, RefreshCw, TrendingUp, CheckCircle2, ArrowRight, Sparkles } from "lucide-react";
-
-/**
- * Premium Program Flexibility Component
- * 
- * Sophisticated design with:
- * - Elegant blue/sky/indigo gradients
- * - Enhanced progress bars
- * - Premium card layouts
- * - Professional visual hierarchy
- */
 
 export default function ProgramFlexibility({
   flexibility,
+  roadmapId,
+  degreeCode,
+  userId,
   simulatorLink = "/switching",
 }) {
   const easySwitches =
@@ -25,6 +17,71 @@ export default function ProgramFlexibility({
     [];
 
   const [degreeLinks, setDegreeLinks] = useState({});
+  const [shouldShowFlexibility, setShouldShowFlexibility] = useState(null);
+
+  // Check if flexibility should be shown based on courses
+  useEffect(() => {
+    const checkIfShouldShow = async () => {
+      if (!degreeCode || !userId) {
+        setShouldShowFlexibility(false);
+        return;
+      }
+
+      try {
+        // Check if degree has courses
+        const { data: degreeData } = await supabase
+          .from("unsw_degrees_final")
+          .select("sections")
+          .eq("degree_code", degreeCode)
+          .maybeSingle();
+
+        let hasDegreeCourses = false;
+        if (degreeData?.sections) {
+          const sections = typeof degreeData.sections === "string" 
+            ? JSON.parse(degreeData.sections) 
+            : degreeData.sections;
+          hasDegreeCourses = sections.some(s => s.courses?.length > 0);
+        }
+
+        // Check if user has selected specializations
+        const { data: userSpecs } = await supabase
+          .from("user_specialisation_selections")
+          .select("honours_id, major_id, minor_id")
+          .eq("user_id", userId)
+          .eq("degree_code", degreeCode)
+          .maybeSingle();
+
+        const hasSpecs = !!(userSpecs?.honours_id || userSpecs?.major_id || userSpecs?.minor_id);
+
+        // If has specs, check if they have courses
+        let hasSpecCourses = false;
+        if (hasSpecs) {
+          const specIds = [userSpecs.honours_id, userSpecs.major_id, userSpecs.minor_id].filter(Boolean);
+          
+          const { data: specData } = await supabase
+            .from("unsw_specialisations")
+            .select("sections")
+            .in("id", specIds);
+
+          if (specData) {
+            hasSpecCourses = specData.some(spec => {
+              const sections = typeof spec.sections === "string" 
+                ? JSON.parse(spec.sections) 
+                : spec.sections;
+              return sections.some(s => s.courses?.length > 0);
+            });
+          }
+        }
+
+        setShouldShowFlexibility(hasDegreeCourses || hasSpecCourses);
+      } catch (err) {
+        console.error("Error checking flexibility eligibility:", err);
+        setShouldShowFlexibility(false);
+      }
+    };
+
+    checkIfShouldShow();
+  }, [degreeCode, userId]);
 
   useEffect(() => {
     async function fetchIds() {
@@ -33,15 +90,36 @@ export default function ProgramFlexibility({
       for (const opt of easySwitches) {
         if (!opt.program_name) continue;
 
-        const { data, error } = await supabase
+        // Use the ID directly from flexibility data if available
+        if (opt.id) {
+          mapping[opt.program_name] = opt.id;
+          continue;
+        }
+
+        // Try exact match first
+        let { data, error } = await supabase
           .from("unsw_degrees_final")
           .select("id")
-          .ilike("program_name", `%${opt.program_name}%`)
+          .eq("program_name", opt.program_name)
           .maybeSingle();
 
+        // Fallback to ilike if exact match fails
+        if (!data?.id) {
+          const result = await supabase
+            .from("unsw_degrees_final")
+            .select("id")
+            .ilike("program_name", `%${opt.program_name}%`)
+            .limit(1)
+            .maybeSingle();
+          
+          data = result.data;
+          error = result.error;
+        }
 
         if (data?.id) {
           mapping[opt.program_name] = data.id;
+        } else {
+          console.warn(`Could not find degree ID for: ${opt.program_name}`);
         }
       }
 
@@ -71,7 +149,7 @@ export default function ProgramFlexibility({
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 p-8 shadow-xl">
       
-    {/* ---------- HEADER ---------- */}
+    {/* HEADER */}
     <div className="relative bg-slate-50/80 dark:bg-slate-800/60 
                     px-8 py-6 -mx-8 -mt-8 mb-6 border-b-2 border-slate-200 dark:border-slate-700
                     rounded-t-2xl">
@@ -97,6 +175,7 @@ export default function ProgramFlexibility({
     <div className="mt-6 mb-8 p-4 rounded-xl bg-gradient-to-br from-blue-50/60 to-indigo-50/40 
                     dark:from-blue-900/20 dark:to-indigo-900/20 
                     border border-blue-200/60 dark:border-blue-800/60 flex items-start gap-3">
+
       {/* Info icon with circular background */}
       <div className="flex items-center justify-center w-6 h-6 rounded-full 
                   bg-blue-100 dark:bg-blue-900/40 shrink-0 mt-0.5">
@@ -106,16 +185,25 @@ export default function ProgramFlexibility({
 
       {/* Info text */}
       <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-        The programs listed below show the most compatible or easiest degrees to switch into, 
-        based on how many courses overlap with your current program’s core structure. 
-        This comparison excludes specialisations such as majors, minors, or honours streams. 
-        For a deeper analysis that includes these specialisations, visit the 
-        <span className="font-semibold text-blue-700 dark:text-blue-400"> My Planner </span> 
-        section of the website.
+        The programs listed below show the most compatible degrees to switch into, 
+        based on course overlap with your current program
+        {easySwitches.some(opt => opt.specialisation) ? (
+          <>
+            {" "}and selected specialisations. When a specific specialisation is recommended 
+            (shown with a purple badge), it means that specialisation significantly improves 
+            your course transfer options compared to the base program alone.
+          </>
+        ) : (
+          <>
+            . This analysis focuses on core program structure. For recommendations that include 
+            specialisation pathways, try regenerating your roadmap after selecting majors, minors, 
+            or honours in the Specialisations section.
+          </>
+        )}
       </p>
     </div>
 
-      {/* ========== DEGREE OPTIONS ========== */}
+      {/* DEGREE OPTIONS */}
       {hasNewData && (
         <div className="space-y-5 mb-8">
           {easySwitches.map((opt, i) => {
@@ -150,6 +238,19 @@ export default function ProgramFlexibility({
                         {opt.program_name}
                       </h3>
                     </div>
+                    
+                    {opt.specialisation && (
+                      <div className="ml-9 mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-full
+                                    bg-gradient-to-r from-purple-100 to-pink-100 
+                                    dark:from-purple-900/40 dark:to-pink-900/40
+                                    border border-purple-300 dark:border-purple-700">
+                        <Sparkles className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                        <span className="text-xs font-semibold text-purple-800 dark:text-purple-200">
+                          {opt.specialisation.name} ({opt.specialisation.type})
+                        </span>
+                      </div>
+                    )}
+                    
                     <p className="text-xs text-slate-500 dark:text-slate-400 ml-9">
                       <span className="font-semibold">Faculty:</span>{" "}
                       <span className="text-slate-700 dark:text-slate-300">
@@ -266,28 +367,63 @@ export default function ProgramFlexibility({
         </div>
       )}
 
-      {/* ========== LOADING STATE ========== */}
+      {/* LOADING/NO DATA STATE */}
       {!hasNewData && (
-        <div className="mb-8">
-          <div className="flex items-center gap-3 text-slate-600 dark:text-slate-400 mb-4 p-4 
-                        bg-gradient-to-r from-blue-50/50 to-indigo-50/50 
-                        dark:from-blue-900/10 dark:to-indigo-900/10 
-                        rounded-xl border border-blue-200/40 dark:border-blue-800/40">
-            <Sparkles className="h-5 w-5 text-blue-600 dark:text-blue-400 animate-pulse" />
-            <span className="text-sm font-medium">
-              Generating personalized flexibility recommendations...
-            </span>
-          </div>
-          <LoadingShimmer />
-        </div>
+        <>
+          {/* Still checking if should show */}
+          {shouldShowFlexibility === null && (
+            <div className="mb-8">
+              <LoadingShimmer />
+            </div>
+          )}
+
+          {/* Should NOT show flexibility */}
+          {shouldShowFlexibility === false && (
+            <div className="mb-8">
+              <div className="p-6 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 
+                            dark:from-slate-800/50 dark:to-slate-800/30 
+                            border border-slate-200/60 dark:border-slate-700/60">
+                <div className="flex items-start gap-3 mb-3">
+                  <Info className="h-5 w-5 text-slate-500 dark:text-slate-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                      Flexibility Information Unavailable
+                    </h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                      Detailed degree switching recommendations are not available for this program. 
+                      This typically occurs when the program structure doesn't include specific course 
+                      listings in our database. For more information about switching programs, visit the 
+                      <span className="font-semibold text-blue-600 dark:text-blue-400"> My Planner </span> 
+                      section or contact UNSW Student Central.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Should show but still generating */}
+          {shouldShowFlexibility === true && (
+            <div className="mb-8">
+              <div className="p-6 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 
+                            dark:from-blue-900/20 dark:to-indigo-900/20 
+                            border border-blue-200/60 dark:border-blue-800/60">
+                <div className="flex items-start gap-3">
+                  <div className="animate-spin h-5 w-5 border-2 border-blue-300 border-t-blue-600 rounded-full flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-300 mb-2">
+                      Generating Degree Flexibility...
+                    </h3>
+                    <p className="text-sm text-blue-600 dark:text-blue-400 leading-relaxed">
+                      Finding compatible degree switching options based on course overlap.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
 }
-
-// Add shimmer animation to your global CSS or tailwind config
-// @keyframes shimmer {
-//   0% { transform: translateX(-100%); }
-//   100% { transform: translateX(100%); }
-// }
-// .animate-shimmer { animation: shimmer 2s infinite; }

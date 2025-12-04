@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from "react";
-import { supabase } from "../../supabaseClient";
-import GeneratingMessage from "./GeneratingMessage";
-import { Info, Award, BookOpen, GraduationCap, X, RefreshCw, ChevronDown, Check } from "lucide-react";
+import { Award, BookOpen, Check, ChevronDown, GraduationCap, Info, Layers, RefreshCw, X } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import SaveButton from "../../components/SaveButton";
+import { supabase } from "../../supabaseClient";
+import GeneratingMessage from "./GeneratingMessage";
 
 
 export default function SpecialisationUNSW({ degreeCode }) {
@@ -19,10 +19,58 @@ export default function SpecialisationUNSW({ degreeCode }) {
   // selector popover state
   const [openType, setOpenType] = useState(null);
 
-  // Selected specialisations - NOW keyed by degree code for double degrees
+  // Selected specialisations
   const [selectedHonours, setSelectedHonours] = useState({});
   const [selectedMajor, setSelectedMajor] = useState({});
   const [selectedMinor, setSelectedMinor] = useState({});
+
+  const parseJSON = (text) => {
+    try {
+      return typeof text === "string" ? JSON.parse(text) : text;
+    } catch {
+      return [];
+    }
+  };
+
+  const allCourses = useMemo(() => {
+    const codes = [];
+    
+    // Iterate through each degree code
+    degreeCodes.forEach(degreeCode => {
+    
+      // Get all selected specialisations for this degree
+      const selections = [
+        selectedHonours[degreeCode],
+        selectedMajor[degreeCode],
+        selectedMinor[degreeCode]
+      ].filter(Boolean); 
+      
+      // Extract courses from each selection
+      selections.forEach(spec => {
+        const sections = parseJSON(spec.sections);
+        if (Array.isArray(sections)) {
+          sections.forEach(section => {
+            if (section.courses && Array.isArray(section.courses)) {
+              section.courses.forEach(course => {
+                if (course.code) {
+                  codes.push(course.code);
+                }
+              });
+            }
+          });
+        }
+      });
+    });
+    
+    // Return unique codes only
+    return Array.from(new Set(codes));
+  }, [degreeCodes, selectedHonours, selectedMajor, selectedMinor]);
+
+  const handleVisualise = () => {
+    if (!degreeCode || !allCourses.length) return;
+    localStorage.setItem("programCourses", JSON.stringify(allCourses));
+    navigate(`/planner/mindmesh?program=${degreeCode}`);
+  };
 
   // Get current user
   useEffect(() => {
@@ -211,13 +259,6 @@ export default function SpecialisationUNSW({ degreeCode }) {
     };
   };
 
-  const parseJSON = (text) => {
-    try {
-      return typeof text === "string" ? JSON.parse(text) : text;
-    } catch {
-      return [];
-    }
-  };
 
   const hasAnySelection = () => {
     const hasHonours = Object.values(selectedHonours).some(v => v !== null);
@@ -481,7 +522,7 @@ export default function SpecialisationUNSW({ degreeCode }) {
     );
   };
 
-  // UPDATED: Render selectors for a specific degree
+  // Render selectors for a specific degree
   const renderDegreeSection = (forDegreeCode) => {
     const groupedByType = getGroupedByType(forDegreeCode);
     const hasSpecs = groupedByType.Honours.length > 0 || 
@@ -492,6 +533,7 @@ export default function SpecialisationUNSW({ degreeCode }) {
 
     return (
       <div key={forDegreeCode} className="space-y-6">
+
         {/* Degree header for double degrees */}
         {degreeCodes.length > 1 && (
           <div className="flex items-center gap-3 pb-3 border-b border-slate-200 dark:border-slate-700">
@@ -573,72 +615,86 @@ export default function SpecialisationUNSW({ degreeCode }) {
               </p>
             </div>
           </div>
+          <div className="flex items-center gap-3">
 
-          {/* Customise Button */}
-          <button
-            disabled={!hasAnySelection()}
-            onClick={async () => {
-              console.log("CUSTOMISE BUTTON CLICKED");
-              
-              if (!userId || !degreeCode) {
-                console.log("Missing userId or degreeCode:", { userId, degreeCode });
-                return;
-              }
-              
-              try {
-                console.log("Fetching degree with code:", degreeCode);
+            {/* Customise Button */}
+            <button
+              disabled={!hasAnySelection()}
+              onClick={async () => {
+                console.log("CUSTOMISE BUTTON CLICKED");
                 
-                const { data: degreeData, error } = await supabase
-                  .from("unsw_degrees_final")
-                  .select("*")
-                  .eq("degree_code", degreeCode)
-                  .single();
-
-                if (error || !degreeData) {
-                  console.error("Could not fetch degree:", error?.message);
+                if (!userId || !degreeCode) {
+                  console.log("Missing userId or degreeCode:", { userId, degreeCode });
                   return;
                 }
                 
-                const stateToPass = { 
-                  type: "unsw", 
-                  degree: {
-                    ...degreeData,
-                    degree_id: degreeData.id,
-                  },
-                  isRegeneration: true,
-                };
-                
-                console.log("NAVIGATING WITH STATE:", stateToPass);
-                console.log("isRegeneration:", stateToPass.isRegeneration);
-                
-                navigate("/roadmap-loading", {
-                  state: stateToPass,
-                  replace: true,
-                });
+                try {
+                  console.log("Fetching degree with code:", degreeCode);
+                  
+                  const { data: degreeData, error } = await supabase
+                    .from("unsw_degrees_final")
+                    .select("*")
+                    .eq("degree_code", degreeCode)
+                    .single();
 
-              } catch (err) {
-                console.error("Error:", err.message);
-              }
-            }}
-            id="customise-btn"
-            className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-semibold shadow-lg transition-all duration-200
-              ${hasAnySelection()
-                ? "bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 hover:-translate-y-0.5"
-                : "bg-slate-300 dark:bg-slate-700 cursor-not-allowed opacity-70"}`}
-          >
-            <RefreshCw className="h-4 w-4" />
-            Customise Roadmap to Specialisation
-          </button>
+                  if (error || !degreeData) {
+                    console.error("Could not fetch degree:", error?.message);
+                    return;
+                  }
+                  
+                  const stateToPass = { 
+                    type: "unsw", 
+                    degree: {
+                      ...degreeData,
+                      degree_id: degreeData.id,
+                    },
+                    isRegeneration: true,
+                  };
+                  
+                  console.log("NAVIGATING WITH STATE:", stateToPass);
+                  console.log("isRegeneration:", stateToPass.isRegeneration);
+                  
+                  navigate("/roadmap-loading", {
+                    state: stateToPass,
+                    replace: true,
+                  });
+
+                } catch (err) {
+                  console.error("Error:", err.message);
+                }
+              }}
+              id="customise-btn"
+              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-semibold shadow-lg transition-all duration-200
+                ${hasAnySelection()
+                  ? "bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 hover:-translate-y-0.5"
+                  : "bg-slate-300 dark:bg-slate-700 cursor-not-allowed opacity-70"}`}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Customise Roadmap to Specialisation
+            </button>
+
+            <button
+              onClick={handleVisualise}
+              disabled={!allCourses.length}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-semibold shadow-lg transition-all duration-200
+                        bg-gradient-to-r from-sky-500 via-blue-500 to-indigo-500 
+                        hover:from-sky-600 hover:via-blue-600 hover:to-indigo-600 hover:-translate-y-0.5
+                        disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+            >
+              <Layers className="h-4 w-4" />
+              Visualise Courses
+            </button>
+          </div>
         </div>
       </div>
-
 
       {/* Intro Text */}
       <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
         {degreeCodes.length > 1 
-          ? "Select specialisations for each program in your double degree. Your selections are automatically saved."
-          : "Select up to one specialisation of each type to tailor your degree. Each selection will show detailed course requirements and structure. Your selections are automatically saved."}
+          ? "Select specialisations for each program in your double degree. Your selections are automatically saved. Use Visualise Courses to map prerequisite links across all selected specialisations."
+          : "Select up to one specialisation of each type to tailor your degree. Your selections are automatically saved. Use Visualise Courses to map prerequisite links in your selected specialisations."}
       </p>
+
 
       <div className="space-y-10">
         {degreeCodes.map(code => renderDegreeSection(code))}

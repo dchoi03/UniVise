@@ -1,12 +1,10 @@
-import { Alert, Button, Checkbox, Label, Select, TextInput } from "flowbite-react";
-import { Link } from "react-router-dom";
-import { useState, useEffect } from "react";
-import { UserAuth } from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
-import { Modal, ModalBody, ModalFooter, ModalHeader } from "flowbite-react";
-import { TermsText } from "./TermsText";
+import { Alert, Button, Checkbox, Label, Modal, ModalBody, ModalHeader, Select, TextInput } from "flowbite-react";
+import { useState } from "react";
 import { FcGoogle } from "react-icons/fc";
+import { Link, useNavigate } from "react-router-dom";
+import { UserAuth } from "../context/AuthContext";
 import { supabase } from "../supabaseClient";
+import { TermsText } from "./TermsText";
 
 
 function RegisterForm() {
@@ -23,31 +21,8 @@ function RegisterForm() {
     const [loading, setLoading] = useState('');
     const [openModal, setOpenModal] = useState(false)
     
-    const navigate = useNavigate()
+    const navigate = useNavigate() 
     const { session, registerNewUser } = UserAuth();
-
-     // Check if user is already logged in (e.g., after Google OAuth redirect)
-    useEffect(() => {
-      const checkSession = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          navigate("/survey");
-        }
-      };
-      checkSession();
-    }, [navigate]);
-
-    // Listen for auth state changes (for Google sign up)
-    useEffect(() => {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_IN' && session) {
-          navigate("/survey");
-        }
-      });
-
-      return () => subscription.unsubscribe();
-    }, [navigate]);
-    
 
     const handleRegister = async (e) => {
       e.preventDefault();
@@ -82,7 +57,7 @@ function RegisterForm() {
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: `${window.location.origin}/survey`
+            redirectTo: `${window.location.origin}/auth/callback`
           }
         });
         if (error) {

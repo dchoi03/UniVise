@@ -1,7 +1,7 @@
 // src/components/progress/SpecialisationSelectionPanel.jsx
-import React, { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { HiCheckCircle, HiChevronUp, HiPencil } from "react-icons/hi";
 import { supabase } from "../../supabaseClient";
-import { HiPencil, HiCheckCircle, HiChevronDown, HiChevronUp } from "react-icons/hi";
 
 export default function SpecialisationSelectionPanel({ 
   enrolledProgram, 
@@ -30,7 +30,8 @@ export default function SpecialisationSelectionPanel({
         .single();
 
       if (degreeData?.program_name?.includes("/")) {
-        // It's a double degree - get individual program codes
+
+        // It's a double degree, get individual program codes
         const programNames = degreeData.program_name.split("/").map(n => n.trim());
 
         const { data: individualDegrees } = await supabase
@@ -105,9 +106,16 @@ export default function SpecialisationSelectionPanel({
     setLoading(true);
 
     try {
+
       // Get current specialisation codes
       const currentCodes = enrolledProgram.specialisation_codes || [];
       const currentNames = enrolledProgram.specialisation_names || [];
+
+      // Find the old spec code being replaced
+      const oldSpecCode = currentCodes.find((code) => {
+        const s = availableSpecialisations.find(sp => sp.major_code === code);
+        return s && s.specialisation_type === selectingType;
+      });
 
       // Remove old spec of this type
       const filteredCodes = currentCodes.filter((code) => {
@@ -132,12 +140,18 @@ export default function SpecialisationSelectionPanel({
         })
         .eq("user_id", userId);
 
-      // Delete completed courses for this specialisation type
-      await supabase
-        .from("user_completed_courses")
-        .delete()
-        .eq("user_id", userId)
-        .ilike("category", `%${selectingType}%`);
+      // Delete completed courses for the OLD specialisation being replaced
+      if (oldSpecCode) {
+
+        const sourceType = selectingType.toLowerCase(); // 'major', 'minor', 'honours'
+        
+        await supabase
+          .from("user_completed_courses")
+          .delete()
+          .eq("user_id", userId)
+          .eq("source_type", sourceType)
+          .eq("source_code", oldSpecCode);
+      }
 
       setConfirmedSpecs(prev => ({
         ...prev,
@@ -157,6 +171,7 @@ export default function SpecialisationSelectionPanel({
 
   return (
     <div>
+
       {/* Compact Program Info */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-4">
@@ -186,6 +201,7 @@ export default function SpecialisationSelectionPanel({
 
             return (
               <div key={type} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800/30">
+                
                 {/* Collapsed State */}
                 {!isSelecting && (
                   <div className="p-3">
